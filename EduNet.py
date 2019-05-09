@@ -136,6 +136,7 @@ def enroll_student():
     user = req['user']
     degree = req['degree']
     university = req['university']
+    marks = req['marks']
 
     client = MongoClient()
     db = client.edunet
@@ -154,6 +155,7 @@ def enroll_student():
         "degree": degree,
         "year": current_year,
         "active": True,
+        "marks": marks,
         "certifiedUser": user,
         "university": university,
         "experience": [
