@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import flask
+from bson import ObjectId
 from flask import Flask
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -186,15 +187,16 @@ def get_enrolled_students():
     students = db.Student
     users = db.User
 
-    student_list = []
+    cert_list = []
     for certificate in certificates.find({'university': university}):
         user = certificate['certifiedUser']
-        student = students.find_one({'userId': user})
+        student = students.find_one({'userId': ObjectId(user)})
         if student:
-            student['user'] = users.find_one({'_id': user})
-            student_list.append(student)
+            student['user'] = users.find_one({'_id': ObjectId(user)})
+            certificate['student'] = student
+            cert_list.append(certificate)
 
-    return JSONEncoder().encode(student_list)
+    return JSONEncoder().encode(cert_list)
 
 
 if __name__ == '__main__':
