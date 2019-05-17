@@ -176,6 +176,33 @@ def enroll_student():
     return JSONEncoder().encode(response)
 
 
+@app.route('/student/enroll/pending', methods=['POST'])
+def get_enroll_pending_students():
+    req = flask.request.json
+    university = req['university']
+
+    client = MongoClient()
+    db = client.edunet
+    certificates = db.Certificate
+
+    student_list = []
+
+    students = db.Student
+    users = db.User
+    students = students.find({'university': university})
+    certified_students = certificates.find({'university': university})
+    certified_students = list(map(lambda x: ObjectId(x['certifiedUser']), certified_students))
+    for student in students:
+        if student['userId'] not in certified_students:
+            user = users.find_one({'_id': student['userId']})
+            student['user'] = user
+            student_list.append(student)
+
+    response = {'status': 200, 'data': student_list}
+
+    return JSONEncoder().encode(response)
+
+
 @app.route('/student/enroll/get', methods=['POST'])
 def get_enrolled_students():
     req = flask.request.json
@@ -197,6 +224,66 @@ def get_enrolled_students():
             cert_list.append(certificate)
 
     return JSONEncoder().encode(cert_list)
+
+
+@app.route('/user/profile/get', methods=['POST'])
+def get_user_profile():
+    req = flask.request.json
+    userId = req['userId']
+
+    client = MongoClient()
+    db = client.edunet
+    certificates = db.Certificate
+    students = db.Student
+    users = db.User
+    experiences = db.Experience
+
+    certificate = certificates.find_one({'certifiedUser': userId})
+    if certificate:
+        user = certificate['certifiedUser']
+        student = students.find_one({'userId': ObjectId(user)})
+        if student:
+            student['user'] = users.find_one({'_id': ObjectId(user)})
+            certificate['student'] = student
+            response = {'status': 200, 'data': certificate}
+        else:
+            response = {'status': 205, 'data': 'no student found'}
+
+        certificate['experience'].pop(0)
+        exp_ids = certificate['experience']
+        for exp_id, i in zip(exp_ids, range(len(exp_ids))):
+            exp = experiences.find_one({'_id': ObjectId(exp_id)})
+            comp = exp['company']
+            comp = users.find_one({'_id': ObjectId(comp)})
+            exp['company'] = comp
+            exp_ids[i] = exp
+        university = users.find_one({'_id': ObjectId(certificate['university'])})
+        certificate['university'] = university
+    else:
+        response = {'status': 205, 'data': 'no certificate found'}
+
+    return JSONEncoder().encode(response)
+
+
+@app.route('/company/hire', methods=['POST'])
+def hire_employee():
+    req = flask.request.json
+    companyId = req['companyId']
+    userId = req['userId']
+
+    client = MongoClient()
+    db = client.edunet
+
+    employees = db.Employee
+    employee = employees.insert_one({
+        'company': companyId,
+        'user': userId,
+        'year': '2019'
+    })
+
+    response = {'status': 200}
+
+    return flask.jsonify(response)
 
 
 if __name__ == '__main__':
