@@ -214,6 +214,7 @@ def get_enrolled_students():
     students = db.Student
     users = db.User
 
+    university_obj = users.find_one({'_id': ObjectId(university)})
     cert_list = []
     for certificate in certificates.find({'university': university}):
         user = certificate['certifiedUser']
@@ -221,6 +222,7 @@ def get_enrolled_students():
         if student:
             student['user'] = users.find_one({'_id': ObjectId(user)})
             certificate['student'] = student
+            certificate['university'] = university_obj
             cert_list.append(certificate)
 
     return JSONEncoder().encode(cert_list)
@@ -270,6 +272,8 @@ def hire_employee():
     req = flask.request.json
     companyId = req['companyId']
     userId = req['userId']
+    department = req['department']
+    role = req['role']
 
     client = MongoClient()
     db = client.edunet
@@ -278,10 +282,66 @@ def hire_employee():
     employee = employees.insert_one({
         'company': companyId,
         'user': userId,
+        'department': department,
+        'role': role,
         'year': '2019'
     })
 
     response = {'status': 200}
+
+    return flask.jsonify(response)
+
+
+@app.route('/company/employees', methods=['POST'])
+def get_all_employee():
+    req = flask.request.json
+    company = req['company']
+
+    client = MongoClient()
+    db = client.edunet
+
+    employees = db.Employee
+    users = db.User
+    empl_list = list(employees.find({'company': company}))
+    for emp in empl_list:
+        user = users.find_one({'_id': ObjectId(emp['user'])})
+        emp['user'] = user
+    return JSONEncoder().encode(empl_list)
+
+
+@app.route('/company/employees', methods=['POST'])
+def add_experience():
+    req = flask.request.json
+    client = MongoClient()
+    db = client.edunet
+    experiences = db.Experience
+    exp_object = {
+        'fromYear': req['from_year'],
+        'toYear': req['to_year'],
+        'company': req['company']
+    }
+    experience = experiences.insert_one(exp_object)
+    experience_id = experience.inserted_id
+    exp_object['experienceId'] = experience_id
+    exp_object['$class'] = 'com.app.edunet.Experience'
+
+    return JSONEncoder().encode(exp_object)
+
+
+@app.route('/home/status', methods=['GET'])
+def get_home_status():
+    client = MongoClient()
+    db = client.edunet
+
+    users = db.User
+    certificates = db.Certificate
+    employees = db.Employee
+
+    response = {
+        'users': len(list(users.find({}))),
+        'certificate': len(list(certificates.find({}))),
+        'employee': len(list(employees.find({})))
+    }
 
     return flask.jsonify(response)
 
