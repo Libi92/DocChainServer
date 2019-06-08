@@ -279,12 +279,13 @@ def hire_employee():
     db = client.edunet
 
     employees = db.Employee
-    employee = employees.insert_one({
+    employees.insert_one({
         'company': companyId,
         'user': userId,
         'department': department,
         'role': role,
-        'year': '2019'
+        'year': datetime.now().year,
+        'active': True
     })
 
     response = {'status': 200}
@@ -302,29 +303,42 @@ def get_all_employee():
 
     employees = db.Employee
     users = db.User
-    empl_list = list(employees.find({'company': company}))
+    empl_list = list(employees.find({'company': company, 'active': True}))
     for emp in empl_list:
         user = users.find_one({'_id': ObjectId(emp['user'])})
         emp['user'] = user
     return JSONEncoder().encode(empl_list)
 
 
-@app.route('/company/employees', methods=['POST'])
+@app.route('/company/employee/relieve', methods=['POST'])
 def add_experience():
     req = flask.request.json
+    userId = req['userId']
+    id = req['id']
     client = MongoClient()
     db = client.edunet
     experiences = db.Experience
+    employees = db.Employee
+    certificates = db.Certificate
+
+    employee = employees.find_one({'user': userId})
+    company = employee['company']
+    from_year = employee['year']
+
     exp_object = {
-        'fromYear': req['from_year'],
-        'toYear': req['to_year'],
-        'company': req['company']
+        'fromYear': from_year,
+        'toYear': datetime.now().year,
+        'company': company
     }
     experience = experiences.insert_one(exp_object)
     experience_id = experience.inserted_id
     exp_object['experienceId'] = experience_id
     exp_object['$class'] = 'com.app.edunet.Experience'
 
+    certificates.update_one({'certifiedUser': userId},
+                            {'$push': {'experience': experience_id}})
+
+    employees.update({'_id': ObjectId(id)}, {'$set': {'active': False}})
     return JSONEncoder().encode(exp_object)
 
 
