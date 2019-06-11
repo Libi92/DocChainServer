@@ -75,6 +75,7 @@ def create_student():
     college = req['college']
     year = req['year']
     university = req['university']
+    adhaar = req['adhaar']
 
     client = MongoClient()
     db = client.edunet
@@ -82,8 +83,8 @@ def create_student():
 
     user = users.insert_one({
         'name': name,
-        'username': registerNo,
-        'password': registerNo,
+        'username': adhaar,
+        'password': adhaar,
         'userType': 'student'
     })
 
@@ -96,6 +97,7 @@ def create_student():
         'degree': degree,
         'college': college,
         'year': year,
+        'adhaar': adhaar,
         'university': university
     })
 
@@ -143,8 +145,8 @@ def enroll_student():
     db = client.edunet
     experiences = db.Experience
     exp_object = {
-        'fromYear': current_year,
-        'toYear': current_year,
+        'fromDate': today,
+        'toDate': today,
         'company': university
     }
     experience = experiences.insert_one(exp_object)
@@ -284,7 +286,7 @@ def hire_employee():
         'user': userId,
         'department': department,
         'role': role,
-        'year': datetime.now().year,
+        'doj': datetime.now(),
         'active': True
     })
 
@@ -323,11 +325,11 @@ def add_experience():
 
     employee = employees.find_one({'user': userId})
     company = employee['company']
-    from_year = employee['year']
+    fromDate = employee['doj']
 
     exp_object = {
-        'fromYear': from_year,
-        'toYear': datetime.now().year,
+        'fromDate': fromDate,
+        'toDate': datetime.now(),
         'company': company
     }
     experience = experiences.insert_one(exp_object)
@@ -357,6 +359,23 @@ def get_home_status():
         'employee': len(list(employees.find({})))
     }
 
+    return flask.jsonify(response)
+
+
+@app.route('/user/profile/update', methods=['POST'])
+def update_profile():
+    client = MongoClient()
+    db = client.edunet
+    users = db.User
+
+    req = flask.request.json
+    userId = req['userId']
+    name = req['name']
+    password = req['password']
+
+    users.update({'_id': ObjectId(userId)}, {'$set': {'name': name, 'password': password}})
+
+    response = {'status': 200}
     return flask.jsonify(response)
 
 
