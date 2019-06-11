@@ -145,8 +145,8 @@ def enroll_student():
     db = client.edunet
     experiences = db.Experience
     exp_object = {
-        'fromDate': today,
-        'toDate': today,
+        'fromDate': today.strftime('%Y-%m-%d'),
+        'toDate': today.strftime('%Y-%m-%d'),
         'company': university
     }
     experience = experiences.insert_one(exp_object)
