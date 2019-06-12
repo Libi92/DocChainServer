@@ -42,6 +42,7 @@ def login():
 def register():
     req = flask.request.json
     name = req['name']
+    afflNo = req['afflNo']
     username = req['username']
     password = req['password']
     userType = req['userType']
@@ -51,6 +52,7 @@ def register():
     users = db.User
     user = users.insert_one({
         'name': name,
+        'afflNo': afflNo,
         'username': username,
         'password': password,
         'userType': userType
