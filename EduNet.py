@@ -100,7 +100,8 @@ def create_student():
         'college': college,
         'year': year,
         'adhaar': adhaar,
-        'university': university
+        'university': university,
+        'enrolled': False
     })
 
     response = {'status': 200}
@@ -108,6 +109,46 @@ def create_student():
     if student:
         response['status'] = True
         response['student'] = user.inserted_id
+    else:
+        response['status'] = False
+
+    return JSONEncoder().encode(response)
+
+
+@app.route('/student/add', methods=['POST'])
+def add_student():
+    req = flask.request.json
+    userId = req['userId']
+    registerNo = req['registerNo']
+    department = req['department']
+    degree = req['degree']
+    college = req['college']
+    year = req['year']
+    university = req['university']
+    adhaar = req['adhaar']
+
+    client = MongoClient()
+    db = client.edunet
+
+    students = db.Student
+
+    student = students.insert_one({
+        'userId': ObjectId(userId),
+        'registerNo': registerNo,
+        'department': department,
+        'degree': degree,
+        'college': college,
+        'year': year,
+        'adhaar': adhaar,
+        'university': university,
+        'enrolled': False
+    })
+
+    response = {'status': 200}
+
+    if student:
+        response['status'] = True
+        response['student'] = userId
     else:
         response['status'] = False
 
@@ -156,23 +197,39 @@ def enroll_student():
     exp_object['experienceId'] = experience_id
     exp_object['$class'] = 'com.app.edunet.Experience'
 
-    cert_object = {
+    certificates = db.Certificate
+
+    cert_object = certificates.find_one({'certifiedUser': user})
+
+    certif_data = {
         "degree": degree,
         "year": current_year,
         "active": True,
         "marks": marks,
-        "certifiedUser": user,
         "university": university,
-        "experience": [
-            experience_id
-        ]
     }
 
-    certificates = db.Certificate
-    certificate = certificates.insert_one(cert_object)
-    certificate_id = certificate.inserted_id
+    if cert_object:
+        certificates.update_one({'certifiedUser': user},
+                                {'$push': {'certificates': certif_data}})
+        certificate_id = cert_object['_id']
+    else:
+        cert_object = {
+            "certifiedUser": user,
+            "certificates": [certif_data],
+            "experience": [
+                experience_id
+            ]
+        }
+
+        certificate = certificates.insert_one(cert_object)
+        certificate_id = certificate.inserted_id
     cert_object['$class'] = 'com.app.edunet.Certificate'
     cert_object['certificateId'] = certificate_id
+
+    students = db.Student
+    students.update_one({'userId': ObjectId(user), 'university': university},
+                        {'$set': {'enrolled': True}})
 
     del exp_object['_id']
     del cert_object['_id']
@@ -187,20 +244,16 @@ def get_enroll_pending_students():
 
     client = MongoClient()
     db = client.edunet
-    certificates = db.Certificate
 
     student_list = []
 
     students = db.Student
     users = db.User
-    students = students.find({'university': university})
-    certified_students = certificates.find({'university': university})
-    certified_students = list(map(lambda x: ObjectId(x['certifiedUser']), certified_students))
+    students = students.find({'university': university, 'enrolled': False})
     for student in students:
-        if student['userId'] not in certified_students:
-            user = users.find_one({'_id': student['userId']})
-            student['user'] = user
-            student_list.append(student)
+        user = users.find_one({'_id': student['userId']})
+        student['user'] = user
+        student_list.append(student)
 
     response = {'status': 200, 'data': student_list}
 
@@ -218,16 +271,16 @@ def get_enrolled_students():
     students = db.Student
     users = db.User
 
-    university_obj = users.find_one({'_id': ObjectId(university)})
     cert_list = []
-    for certificate in certificates.find({'university': university}):
-        user = certificate['certifiedUser']
-        student = students.find_one({'userId': ObjectId(user)})
-        if student:
-            student['user'] = users.find_one({'_id': ObjectId(user)})
-            certificate['student'] = student
-            certificate['university'] = university_obj
-            cert_list.append(certificate)
+    students = db.Student
+    users = db.User
+    students = students.find({'university': university, 'enrolled': True})
+    certificate = {}
+    for student in students:
+        user = users.find_one({'_id': student['userId']})
+        student['user'] = user
+        certificate['student'] = student
+        cert_list.append(certificate)
 
     return JSONEncoder().encode(cert_list)
 
@@ -247,10 +300,14 @@ def get_user_profile():
     certificate = certificates.find_one({'certifiedUser': userId})
     if certificate:
         user = certificate['certifiedUser']
-        student = students.find_one({'userId': ObjectId(user)})
-        if student:
-            student['user'] = users.find_one({'_id': ObjectId(user)})
-            certificate['student'] = student
+        students_obj = students.find({'userId': ObjectId(user)})
+        student_list = []
+        if students_obj:
+            for student in students_obj:
+                student['user'] = users.find_one({'_id': ObjectId(user)})
+                student['university'] = users.find_one({'_id': ObjectId(student['university'])})
+                student_list.append(student)
+            certificate['student'] = student_list
             response = {'status': 200, 'data': certificate}
         else:
             response = {'status': 205, 'data': 'no student found'}
@@ -263,10 +320,16 @@ def get_user_profile():
             comp = users.find_one({'_id': ObjectId(comp)})
             exp['company'] = comp
             exp_ids[i] = exp
-        university = users.find_one({'_id': ObjectId(certificate['university'])})
-        certificate['university'] = university
-    else:
-        response = {'status': 205, 'data': 'no certificate found'}
+        cert_list = certificate['certificates']
+        if cert_list:
+            for certif in cert_list:
+                student_obj = students.find_one({'userId': ObjectId(userId), 'university': certif['university']})
+                student_obj['user'] = users.find_one({'_id': ObjectId(user)})
+                university = users.find_one({'_id': ObjectId(certif['university'])})
+                certif['university'] = university
+                certif['student'] = student_obj
+        else:
+            response = {'status': 205, 'data': 'no certificate found'}
 
     return JSONEncoder().encode(response)
 
